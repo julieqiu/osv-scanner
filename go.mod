@@ -9,6 +9,7 @@ require (
 	github.com/go-git/go-git/v5 v5.6.1
 	github.com/google/go-cmp v0.5.9
 	github.com/jedib0t/go-pretty/v6 v6.4.6
+	github.com/julieqiu/vuln v0.0.0-20230323153352-bb0604a849c4
 	github.com/kr/pretty v0.3.1
 	github.com/package-url/packageurl-go v0.1.0
 	github.com/spdx/tools-golang v0.4.0

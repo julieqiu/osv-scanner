@@ -46,6 +46,10 @@ github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99/go.mod h1:1lJo3i
 github.com/jedib0t/go-pretty/v6 v6.4.6 h1:v6aG9h6Uby3IusSSEjHaZNXpHFhzqMmjXcPq1Rjl9Jw=
 github.com/jedib0t/go-pretty/v6 v6.4.6/go.mod h1:Ndk3ase2CkQbXLLNf5QDHoYb6J9WtVfmHZu9n8rk2xs=
 github.com/jessevdk/go-flags v1.5.0/go.mod h1:Fw0T6WPc1dYxT4mKEZRfG5kJhaTDP9pj1c2EWnYs/m4=
+github.com/julieqiu/vuln v0.0.0-20230323152403-7eb9d419d56a h1:T0ndF2sVc480MyEnpCHYPvVSaibBtayHItMNZJrRi/Q=
+github.com/julieqiu/vuln v0.0.0-20230323152403-7eb9d419d56a/go.mod h1:3FvEV9QOaOg1L/fmljhlTuWJfSUh60OLz7IrC2QQ4oM=
+github.com/julieqiu/vuln v0.0.0-20230323153352-bb0604a849c4 h1:iABILyY2JALzLvnSUFn5Kd/2qGX86ErmH1DDfkpXWbs=
+github.com/julieqiu/vuln v0.0.0-20230323153352-bb0604a849c4/go.mod h1:3FvEV9QOaOg1L/fmljhlTuWJfSUh60OLz7IrC2QQ4oM=
 github.com/kevinburke/ssh_config v1.2.0 h1:x584FjTGwHzMwvHx18PXxbBVzfnxogHaAReU4gf13a4=
 github.com/kevinburke/ssh_config v1.2.0/go.mod h1:CT57kijsi8u/K/BOFA39wgDQJ9CxiF4nAY/ojJ6r6mM=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=

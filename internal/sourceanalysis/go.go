@@ -1,32 +1,76 @@
 package sourceanalysis
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/google/osv-scanner/internal/govulncheckshim"
 	"github.com/google/osv-scanner/internal/output"
 	"github.com/google/osv-scanner/pkg/models"
+	newgovulncheck "github.com/julieqiu/vuln"
 	"golang.org/x/exp/slices"
 	"golang.org/x/vuln/exp/govulncheck"
 )
 
+const vulndbcache = "/tmp/osvscanner/vulndb"
+
 func goAnalysis(r *output.Reporter, pkgs []models.PackageVulns, source models.SourceInfo) {
 	vulns, vulnsByID := vulnsFromAllPkgs(pkgs)
-	res, err := govulncheckshim.RunGoVulnCheck(filepath.Dir(source.Path), vulns)
-	if err != nil {
-		// TODO: Better method to identify the type of error and give advice specific to the error
-		r.PrintError(
-			fmt.Sprintf("Failed to run code analysis (govulncheck) on '%s' because %s\n"+
-				"(the Go toolchain is required)\n", source.Path, err.Error()))
+	newapi := os.Getenv("GOVULNCHECK_API_NEW")
+	if newapi == "true" {
+		err := createDBCache(vulnsByID)
+		if err != nil {
+			r.PrintError(err.Error())
+			return
+		}
+		if err := newgovulncheck.Command(context.Background(), "govulncheck", "./...").Run(); err != nil {
+			r.PrintError(err.Error())
+			return
+		}
+	} else {
+		res, err := govulncheckshim.RunGoVulnCheck(filepath.Dir(source.Path), vulns)
+		if err != nil {
+			// TODO: Better method to identify the type of error and give advice specific to the error
+			r.PrintError(
+				fmt.Sprintf("Failed to run code analysis (govulncheck) on '%s' because %s\n"+
+					"(the Go toolchain is required)\n", source.Path, err.Error()))
 
-		return
+			return
+		}
+		gvcResByVulnID := map[string]*govulncheck.Vuln{}
+		for _, v := range res.Vulns {
+			gvcResByVulnID[v.OSV.ID] = v
+		}
+		matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID)
 	}
-	gvcResByVulnID := map[string]*govulncheck.Vuln{}
-	for _, v := range res.Vulns {
-		gvcResByVulnID[v.OSV.ID] = v
+}
+
+func createDBCache(vulnsByID map[string]models.Vulnerability) error {
+	// 1. Write vulns to modules.json and to ID/ file.
+	if err := os.MkdirAll(vulndbcache, 0755); err != nil {
+		return err
 	}
-	matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID)
+	for id, entry := range vulnsByID {
+		if err := write(filepath.Join(vulndbcache, id+".json"), entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func write(filename string, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	// Write standard.
+	if err := os.WriteFile(filename, b, 0644); err != nil {
+		return err
+	}
+	return nil
 }
 
 func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID map[string]*govulncheck.Vuln, vulnsByID map[string]models.Vulnerability) {
