@@ -111,6 +111,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 			r = output.NewReporter(stdout, stderr, format)
 
+			fmt.Println("DoScan")
 			vulnResult, err := osvscanner.DoScan(osvscanner.ScannerActions{
 				LockfilePaths:            context.StringSlice("lockfile"),
 				SBOMPaths:                context.StringSlice("sbom"),

@@ -4,31 +4,57 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/google/osv-scanner/internal/govulncheckshim"
 	"github.com/google/osv-scanner/internal/output"
+	"github.com/google/osv-scanner/internal/result"
 	"github.com/google/osv-scanner/pkg/models"
 	newgovulncheck "github.com/julieqiu/vuln"
 	"golang.org/x/exp/slices"
-	"golang.org/x/vuln/exp/govulncheck"
 )
 
 const vulndbcache = "/tmp/osvscanner/vulndb"
 
 func goAnalysis(r *output.Reporter, pkgs []models.PackageVulns, source models.SourceInfo) {
 	vulns, vulnsByID := vulnsFromAllPkgs(pkgs)
+	fmt.Println("goAnalysis!")
 	newapi := os.Getenv("GOVULNCHECK_API_NEW")
+	gvcResByVulnID := map[string]*Result{}
 	if newapi == "true" {
+		fmt.Println("using the new API")
 		err := createDBCache(vulnsByID)
 		if err != nil {
 			r.PrintError(err.Error())
 			return
 		}
-		if err := newgovulncheck.Command(context.Background(), "govulncheck", "./...").Run(); err != nil {
+		fmt.Println("created cache")
+		reader, writer := io.Pipe()
+		cmd := newgovulncheck.Command(context.Background(), "govulncheck", "-json", "./...")
+		cmd.Stdout = writer
+		cmd.Dir = filepath.Dir(source.Path)
+		if err := cmd.Run(); err != nil {
 			r.PrintError(err.Error())
 			return
+		}
+		vulns, err := handleJSON(reader)
+		if err != nil {
+			r.PrintError(err.Error())
+			return
+		}
+		for _, v := range vulns {
+			var r *Result
+			for _, m := range v.Modules {
+				r.Modules = append(r.Modules, &Module{Path: m.Path})
+				for _, p := range m.Packages {
+					if len(p.CallStacks) > 0 {
+						r.Affected = true
+					}
+				}
+			}
+			gvcResByVulnID[v.OSV.ID] = r
 		}
 	} else {
 		res, err := govulncheckshim.RunGoVulnCheck(filepath.Dir(source.Path), vulns)
@@ -40,12 +66,17 @@ func goAnalysis(r *output.Reporter, pkgs []models.PackageVulns, source models.So
 
 			return
 		}
-		gvcResByVulnID := map[string]*govulncheck.Vuln{}
 		for _, v := range res.Vulns {
-			gvcResByVulnID[v.OSV.ID] = v
+			r := &Result{Affected: v.IsCalled()}
+			for _, m := range v.Modules {
+				r.Modules = append(r.Modules, &Module{
+					Path: m.Path,
+				})
+			}
+			gvcResByVulnID[v.OSV.ID] = r
 		}
-		matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID)
 	}
+	matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID)
 }
 
 func createDBCache(vulnsByID map[string]models.Vulnerability) error {
@@ -73,7 +104,17 @@ func write(filename string, v any) error {
 	return nil
 }
 
-func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID map[string]*govulncheck.Vuln, vulnsByID map[string]models.Vulnerability) {
+type Result struct {
+	Affected bool
+	Modules  []*Module
+}
+
+type Module struct {
+	Path string
+}
+
+func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID map[string]*Result, vulnsByID map[string]models.Vulnerability) {
+	fmt.Println("matchAnalysisWithPackageVulns")
 	for _, pv := range pkgs {
 		// Use index to keep reference to original element in slice
 		for groupIdx := range pv.Groups {
@@ -89,7 +130,7 @@ func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID ma
 					continue
 				}
 				// Module list is unlikely to be very big, linear search is fine
-				containsModule := slices.ContainsFunc(gvcVuln.Modules, func(module *govulncheck.Module) bool {
+				containsModule := slices.ContainsFunc(gvcVuln.Modules, func(module *Module) bool {
 					return module.Path == pv.Package.Name
 				})
 
@@ -99,9 +140,10 @@ func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID ma
 						Called: false,
 					}
 				} else {
+					fmt.Println("!!!", vulnID, gvcVuln.Affected)
 					// Code does import module, check if it's called
 					(*analysis)[vulnID] = models.AnalysisInfo{
-						Called: gvcVuln.IsCalled(),
+						Called: gvcVuln.Affected,
 					}
 				}
 			}
@@ -126,4 +168,22 @@ func fillNotImportedAnalysisInfo(vulnsByID map[string]models.Vulnerability, vuln
 			}
 		}
 	}
+}
+
+// handleJSON reads the json from the supplied stream and hands the decoded
+// output to the handler.
+func handleJSON(from io.Reader) ([]*result.Vuln, error) {
+	dec := json.NewDecoder(from)
+	var vulns []*result.Vuln
+	for dec.More() {
+		msg := result.Message{}
+		// decode the next message in the stream
+		if err := dec.Decode(&msg); err != nil {
+			return nil, err
+		}
+		if msg.Vulnerability != nil {
+			vulns = append(vulns, msg.Vulnerability)
+		}
+	}
+	return vulns, nil
 }
