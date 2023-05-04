@@ -8,75 +8,71 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/google/osv-scanner/internal/govulncheckshim"
 	"github.com/google/osv-scanner/internal/output"
-	"github.com/google/osv-scanner/internal/result"
+	"github.com/google/osv-scanner/internal/sourceanalysis/govulncheck"
 	"github.com/google/osv-scanner/pkg/models"
-	newgovulncheck "github.com/julieqiu/vuln"
 	"golang.org/x/exp/slices"
+	"golang.org/x/vuln/scan"
 )
 
 const vulndbcache = "/tmp/osvscanner/vulndb"
 
-func goAnalysis(r *output.Reporter, pkgs []models.PackageVulns, source models.SourceInfo) {
-	vulns, vulnsByID := vulnsFromAllPkgs(pkgs)
-	fmt.Println("goAnalysis!")
-	newapi := os.Getenv("GOVULNCHECK_API_NEW")
+func goAnalysis(r *output.Reporter, pkgs []models.PackageVulns, source models.SourceInfo) (*models.PackageSource, error) {
+	_, vulnsByID := vulnsFromAllPkgs(pkgs)
 	gvcResByVulnID := map[string]*Result{}
-	if newapi == "true" {
-		fmt.Println("using the new API")
-		err := createDBCache(vulnsByID)
-		if err != nil {
-			r.PrintError(err.Error())
-			return
-		}
-		fmt.Println("created cache")
-		reader, writer := io.Pipe()
-		cmd := newgovulncheck.Command(context.Background(), "govulncheck", "-json", "./...")
-		cmd.Stdout = writer
-		cmd.Dir = filepath.Dir(source.Path)
-		if err := cmd.Run(); err != nil {
-			r.PrintError(err.Error())
-			return
-		}
-		vulns, err := handleJSON(reader)
-		if err != nil {
-			r.PrintError(err.Error())
-			return
-		}
-		for _, v := range vulns {
-			var r *Result
-			for _, m := range v.Modules {
-				r.Modules = append(r.Modules, &Module{Path: m.Path})
-				for _, p := range m.Packages {
-					if len(p.CallStacks) > 0 {
-						r.Affected = true
-					}
-				}
-			}
-			gvcResByVulnID[v.OSV.ID] = r
-		}
-	} else {
-		res, err := govulncheckshim.RunGoVulnCheck(filepath.Dir(source.Path), vulns)
-		if err != nil {
-			// TODO: Better method to identify the type of error and give advice specific to the error
-			r.PrintError(
-				fmt.Sprintf("Failed to run code analysis (govulncheck) on '%s' because %s\n"+
-					"(the Go toolchain is required)\n", source.Path, err.Error()))
-
-			return
-		}
-		for _, v := range res.Vulns {
-			r := &Result{Affected: v.IsCalled()}
-			for _, m := range v.Modules {
-				r.Modules = append(r.Modules, &Module{
-					Path: m.Path,
-				})
-			}
-			gvcResByVulnID[v.OSV.ID] = r
+	err := createDBCache(vulnsByID)
+	if err != nil {
+		return nil, err
+	}
+	cmd := scan.Command(context.Background(), "govulncheck", "-C", source.Path, "-json", "./...")
+	reader := cmd.StdoutPipe()
+	var h *osvHandler
+	if err := handleJSON(reader, h); err != nil {
+		return nil, err
+	}
+	if err := cmd.Wait(); err != nil {
+		return nil, err
+	}
+	for _, f := range h.findings {
+		if isCalled(f) {
+			// do something
 		}
 	}
-	matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID)
+	return matchAnalysisWithPackageVulns(pkgs, gvcResByVulnID, vulnsByID), nil
+}
+
+// isCalled reports whether the vulnerability is called, therefore
+// affecting the target source code or binary.
+func isCalled(v *govulncheck.Finding) bool {
+	for _, m := range v.Modules {
+		for _, p := range m.Packages {
+			if len(p.CallStacks) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+type osvHandler struct {
+	findings []*govulncheck.Finding
+}
+
+func (h *osvHandler) Finding(finding *govulncheck.Finding) {
+	h.findings = append(h.findings, finding)
+}
+
+func handleJSON(from io.Reader, to *osvHandler) error {
+	dec := json.NewDecoder(from)
+	for dec.More() {
+		msg := govulncheck.Message{}
+		// decode the next message in the stream
+		if err := dec.Decode(&msg); err != nil {
+			return err
+		}
+		to.Finding(msg.Finding)
+	}
+	return nil
 }
 
 func createDBCache(vulnsByID map[string]models.Vulnerability) error {
@@ -113,7 +109,7 @@ type Module struct {
 	Path string
 }
 
-func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID map[string]*Result, vulnsByID map[string]models.Vulnerability) {
+func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID map[string]*Result, vulnsByID map[string]models.Vulnerability) *models.PackageSource {
 	fmt.Println("matchAnalysisWithPackageVulns")
 	for _, pv := range pkgs {
 		// Use index to keep reference to original element in slice
@@ -149,6 +145,7 @@ func matchAnalysisWithPackageVulns(pkgs []models.PackageVulns, gvcResByVulnID ma
 			}
 		}
 	}
+	return nil
 }
 
 // fillNotImportedAnalysisInfo checks for any source information in advisories, and sets called to false
@@ -168,22 +165,4 @@ func fillNotImportedAnalysisInfo(vulnsByID map[string]models.Vulnerability, vuln
 			}
 		}
 	}
-}
-
-// handleJSON reads the json from the supplied stream and hands the decoded
-// output to the handler.
-func handleJSON(from io.Reader) ([]*result.Vuln, error) {
-	dec := json.NewDecoder(from)
-	var vulns []*result.Vuln
-	for dec.More() {
-		msg := result.Message{}
-		// decode the next message in the stream
-		if err := dec.Decode(&msg); err != nil {
-			return nil, err
-		}
-		if msg.Vulnerability != nil {
-			vulns = append(vulns, msg.Vulnerability)
-		}
-	}
-	return vulns, nil
 }
