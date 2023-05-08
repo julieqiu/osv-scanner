@@ -3,8 +3,12 @@ package sourceanalysis
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
+	"os"
 
+	"github.com/google/osv-scanner/internal/sourceanalysis/database"
 	"github.com/google/osv-scanner/internal/sourceanalysis/govulncheck"
 	"github.com/google/osv-scanner/pkg/models"
 	"golang.org/x/exp/slices"
@@ -12,9 +16,24 @@ import (
 	"golang.org/x/vuln/scan"
 )
 
-func goAnalysis(dir string, pkgs []models.PackageVulns) ([]models.PackageVulns, error) {
-	_, vulnsByID := vulnsFromAllPkgs(pkgs)
-	cmd := scan.Command(context.Background(), "-C", dir, "-json", "./...")
+func goAnalysis(dir string, pkgs []models.PackageVulns) (_ []models.PackageVulns, err error) {
+	vulns, vulnsByID := vulnsFromAllPkgs(pkgs)
+
+	dbdir, err := os.MkdirTemp("", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := database.Create(dbdir, vulns); err != nil {
+		return nil, err
+	}
+	defer func() {
+		rerr := os.RemoveAll(dir)
+		if err == nil {
+			err = rerr
+		}
+	}()
+
+	cmd := scan.Command(context.Background(), "-db", fmt.Sprintf("file://%s", dbdir), "-C", dir, "-json", "./...")
 	reader := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
 		return nil, err
