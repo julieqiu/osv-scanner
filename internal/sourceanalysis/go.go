@@ -1,6 +1,7 @@
 package sourceanalysis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"github.com/google/osv-scanner/internal/sourceanalysis/govulncheck"
 	"github.com/google/osv-scanner/pkg/models"
 	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/vuln/scan"
 )
 
@@ -34,24 +34,18 @@ func goAnalysis(dir string, pkgs []models.PackageVulns) (_ []models.PackageVulns
 	}()
 
 	cmd := scan.Command(context.Background(), "-db", fmt.Sprintf("file://%s", dbdir), "-C", dir, "-json", "./...")
-	reader := cmd.StdoutPipe()
+	var b bytes.Buffer
+	cmd.Stdout = &b
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	defer reader.Close()
-
-	h := &osvHandler{
-		osvToFinding: map[string]*govulncheck.Finding{},
-	}
-	g := new(errgroup.Group)
-	g.Go(func() error {
-		return handleJSON(reader, h)
-	})
-
 	if err := cmd.Wait(); err != nil {
 		return nil, err
 	}
-	if err := g.Wait(); err != nil {
+	h := &osvHandler{
+		osvToFinding: map[string]*govulncheck.Finding{},
+	}
+	if err := handleJSON(bytes.NewReader(b.Bytes()), h); err != nil {
 		return nil, err
 	}
 	return matchAnalysisWithPackageVulns(pkgs, h.osvToFinding, vulnsByID), nil
