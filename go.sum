@@ -174,10 +174,10 @@ golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc
 golang.org/x/tools v0.2.0/go.mod h1:y4OqIKeOV/fWJetJ8bXPU1sEVniLMIyDAZWeHdV+NTA=
 golang.org/x/tools v0.8.1-0.20230421161920-b9619ee54b47 h1:fQlOhMJ24apqitZX8S4hbCbHU1Z9AvyWkN3BYI55Le4=
 golang.org/x/tools v0.8.1-0.20230421161920-b9619ee54b47/go.mod h1:JxBZ99ISMI5ViVkT1tr6tdNmXeTrcpVSD3vZ1RsRdN4=
-golang.org/x/vuln v0.1.1-0.20230504151721-267a472bf377 h1:lIYjWQs/7cHmKw0+gRn3/MUAJIpxZsoWnryVRCY3Km8=
-golang.org/x/vuln v0.1.1-0.20230504151721-267a472bf377/go.mod h1:V0eyhHwaAaHrt42J9bgrN6rd12f6GU4T0Lu0ex2wDg4=
-golang.org/x/vuln v0.1.1-0.20230505201434-d573de52cfad h1:rdb70f5jEVQW5fhYcDGR8nRI3E+/7vDCS7OGVGac6q4=
-golang.org/x/vuln v0.1.1-0.20230505201434-d573de52cfad/go.mod h1:V0eyhHwaAaHrt42J9bgrN6rd12f6GU4T0Lu0ex2wDg4=
+golang.org/x/vuln v0.1.1-0.20230519043451-0e42683d7808 h1:wONxNPbHtFp0Ern9o6AIePAWZchvw16H5ZA2t3AkOFY=
+golang.org/x/vuln v0.1.1-0.20230519043451-0e42683d7808/go.mod h1:V0eyhHwaAaHrt42J9bgrN6rd12f6GU4T0Lu0ex2wDg4=
+golang.org/x/vuln v0.1.1-0.20230522185552-4d485808dc85 h1:YIayiDAeSCL4GYlgrlF8U6/9c3FqBbP8GluDHzHNpW4=
+golang.org/x/vuln v0.1.1-0.20230522185552-4d485808dc85/go.mod h1:V0eyhHwaAaHrt42J9bgrN6rd12f6GU4T0Lu0ex2wDg4=
 golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
