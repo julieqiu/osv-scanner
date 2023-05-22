@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/google/osv-scanner/internal/sourceanalysis/database"
 	"github.com/google/osv-scanner/internal/sourceanalysis/govulncheck"
 	"github.com/google/osv-scanner/pkg/models"
 	"golang.org/x/exp/slices"
@@ -17,14 +16,11 @@ import (
 )
 
 func goAnalysis(dir string, pkgs []models.PackageVulns) (_ []models.PackageVulns, err error) {
-	vulns, vulnsByID := vulnsFromAllPkgs(pkgs)
+	_, vulnsByID := vulnsFromAllPkgs(pkgs)
 
 	dbdir, err := os.MkdirTemp("", "")
 	if err != nil {
 		log.Fatal(err)
-	}
-	if err := database.Create(dbdir, vulns); err != nil {
-		return nil, err
 	}
 	defer func() {
 		rerr := os.RemoveAll(dir)
